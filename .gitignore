@@ -1,0 +1,22 @@
+# секреты и удостоверения машин — никогда
+.env
+*.env
+*.pem
+*.key
+id_*
+*_identity
+*_address.txt
+*_askpass.sh
+
+# мусор
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+*.tar
+*.tar.gz
+*.deb
+
+# локальные заметки
+NOTES.local.md
