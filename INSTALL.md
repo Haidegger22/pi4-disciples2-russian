@@ -241,6 +241,8 @@ rm ~/.config/pipewire/pipewire.conf.d/99-buffer.conf             # звук по
 
 ---
 
+---
+
 ## Полный код файлов (установка без git)
 
 Ниже — полное содержимое каждого файла. Если `git clone` недоступен, вставляйте эти блоки
@@ -705,7 +707,8 @@ cat > $HOME/d2-scripts/06-screens.sh << 'SCRIPT_EOF'
 # поднимает логическое разрешение до 1144x686 — тогда игра запускается и на ней.
 set -u
 
-PANEL_SCALE="${PANEL_SCALE:-0.7}"
+PANEL_SCALE="${PANEL_SCALE:-1}"     # система всегда в нормальном масштабе;
+                                     # нужный игре 0.75 поднимает лаунчер disciples2.sh
 LOG="${LOG:-/tmp/screens-setup.log}"
 
 echo "=== Выходы сейчас:"
@@ -1147,22 +1150,42 @@ if [ ! -d "$GAME" ]; then
   exit 1
 fi
 
-# Игре нужно не меньше 800x600; на встроенной панели 800x480 выручает масштаб 0.7
-# (см. 06-screens.sh) — тогда логическое разрешение становится 1144x686.
+PANEL=$(wlr-randr 2>/dev/null | awk '/^DSI/{print $1; exit}')
+HDMI=$(wlr-randr 2>/dev/null | awk '/^HDMI/{print $1; exit}')
+
+# Возврат нормального разрешения — на любой выход (обычный, Ctrl+C, kill).
+restore() {
+  if [ -n "$HDMI" ]; then
+    wlr-randr --output "$HDMI" --on --scale 1 --pos 0,0 2>/dev/null
+    [ -n "$PANEL" ] && wlr-randr --output "$PANEL" --on --scale 1 --pos 1360,0 2>/dev/null
+  elif [ -n "$PANEL" ]; then
+    wlr-randr --output "$PANEL" --on --scale 1 --pos 0,0 2>/dev/null
+  fi
+}
+trap restore EXIT INT TERM
+
+# Масштаб поднимаем ТОЛЬКО когда играем на встроенной панели без телевизора.
+# Почему 0.75: панель 800x480 отдаёт режим только 800x480, а игре нужно не меньше
+# 800x600, плюс её окно — 1063x600. Масштаб 0.75 даёт логически 1066x640 — помещается.
+# (1.0 -> 800x480 мало; 0.8 -> 1003x602 уже; 0.7 -> 1144x686 помещается, но мелко.)
+if [ -z "$HDMI" ] && [ -n "$PANEL" ]; then
+  wlr-randr --output "$PANEL" --on --scale 0.75 --pos 0,0 2>/dev/null
+  sleep 3
+fi
+
 G=$(xdotool getdisplaygeometry 2>/dev/null)
 W=${G% *}; H=${G#* }
 if [ "${W:-0}" -lt 1000 ] || [ "${H:-0}" -lt 600 ]; then
   MSG="Экран ${W}x${H} — игре нужно не меньше 800x600.
-Подключите телевизор/монитор по HDMI либо выполните scripts/06-screens.sh,
-он поднимет логическое разрешение встроенной панели до 1144x686."
-  if command -v zenity >/dev/null 2>&1; then
-    zenity --warning --title="Disciples II" --text="$MSG" 2>/dev/null
-  fi
+Подключите телевизор/монитор по HDMI либо выполните scripts/06-screens.sh."
+  command -v zenity >/dev/null 2>&1 && zenity --warning --title="Disciples II" --text="$MSG" 2>/dev/null
   echo "ВНИМАНИЕ: $MSG"
 fi
 
 cd "$GAME" || exit 1
-exec wine Discipl2.exe
+# Без exec: иначе возврат масштаба после выхода из игры не сработает
+wine Discipl2.exe
+echo "Игра закрыта — возвращаю нормальное разрешение"
 SCRIPT_EOF
 chmod +x $HOME/disciples2.sh 2>/dev/null || true
 ```
