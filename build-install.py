@@ -25,6 +25,7 @@ ITEMS = [
     ("06-screens.sh",          "Два экрана: телевизор слева, панель справа", "$HOME/d2-scripts/06-screens.sh"),
     ("07-ru-case-fix.py",      "Поиск и удаление двойников имён (регистр)", "$HOME/d2-scripts/07-ru-case-fix.py"),
     ("08-check.sh",            "Проверка установки", "$HOME/d2-scripts/08-check.sh"),
+    ("09-game-speed.sh",       "Скорость боя и карты", "$HOME/d2-scripts/09-game-speed.sh"),
     ("disciples2.sh",          "Запуск игры (ярлык)", "$HOME/disciples2.sh"),
 ]
 

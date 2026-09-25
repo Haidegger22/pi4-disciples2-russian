@@ -100,6 +100,19 @@ done
 # регистр каталога: в некоторых пакетах каталог называется interf, у игры Interf
 [ -d "$SRC/interf" ] && cp -a "$SRC/interf/." "$GAME_DIR/Interf/" 2>/dev/null && echo "    interf → Interf (регистр исправлен)"
 
+# каталог сохранений: без него игра выдаёт «Ошибка при сохранении игры».
+# Пакет приносит готовый SaveGame — копируем его; если нет, создаём пустой.
+if [ -d "$SRC/SaveGame" ]; then
+  cp -a "$SRC/SaveGame" "$GAME_DIR/" 2>/dev/null && echo "    SaveGame → скопирован из пакета"
+fi
+mkdir -p "$GAME_DIR/SaveGame" && chmod 775 "$GAME_DIR/SaveGame"
+if touch "$GAME_DIR/SaveGame/.probe" 2>/dev/null; then
+  rm -f "$GAME_DIR/SaveGame/.probe"
+  echo "    SaveGame → на месте, запись работает"
+else
+  echo "    ВНИМАНИЕ: в SaveGame нет прав на запись — сохранения не будут работать"
+fi
+
 echo
 echo "    Не копирую (намеренно): Discipl2.exe, *.dll — они от старой сборки и вернут розовые текстуры."
 
