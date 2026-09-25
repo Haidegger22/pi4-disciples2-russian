@@ -47,12 +47,37 @@ restore() {
 trap restore EXIT INT TERM
 
 # Масштаб поднимаем ТОЛЬКО когда играем на встроенной панели без телевизора.
-# Почему 0.75: панель 800x480 отдаёт режим только 800x480, а игре нужно не меньше
-# 800x600, плюс её окно — 1063x600. Масштаб 0.75 даёт логически 1066x640 — помещается.
-# (1.0 -> 800x480 мало; 0.8 -> 1003x602 уже; 0.7 -> 1144x686 помещается, но мелко.)
+# Панель 800x480 отдаёт единственный физический режим 800x480, а игре нужно не меньше
+# 800x600. Масштаб 0.8 даёт логически 1003x602 — окно игры уменьшено до 1000x600,
+# поэтому помещается. (Замеры: 1.0 -> 800x480 мало; 0.8 -> 1003x602; 0.75 -> 1066x640
+# с большим запасом, но картинка мельче; 0.7 -> 1144x686 мелко.)
 if [ -z "$HDMI" ] && [ -n "$PANEL" ]; then
-  wlr-randr --output "$PANEL" --on --scale 0.75 --pos 0,0 2>/dev/null
+  wlr-randr --output "$PANEL" --on --scale 0.8 --pos 0,0 2>/dev/null
   sleep 3
+
+  # Окно игры должно помещаться в логическое разрешение (1003x602 при масштабе 0.8).
+  # По умолчанию игра просит 1063x600 — это шире, поэтому выставляем 1000x600.
+  INI="$GAME/Disciple.ini"
+  if [ -f "$INI" ] && ! grep -qaE '^DisplayWidth=1000' "$INI"; then
+    cp -a "$INI" "$INI.bak-window" 2>/dev/null
+    python3 - "$INI" <<'PY'
+import io, re, sys
+p = sys.argv[1]
+raw = io.open(p, "rb").read().decode("cp1251", "replace")
+parts = re.split(r'(\[[^\]]+\])', raw)
+out, cur = [], None
+for part in parts:
+    if re.fullmatch(r'\[[^\]]+\]', part):
+        cur = part; out.append(part); continue
+    if cur == "[Wrapper]":
+        part = re.sub(r'(?im)^(\s*DisplayWidth\s*=\s*).*$', r'\g<1>1000', part, count=1)
+        part = re.sub(r'(?im)^(\s*DisplayHeight\s*=\s*).*$', r'\g<1>600', part, count=1)
+    out.append(part)
+res = "".join(out).replace("\r\n", "\n").replace("\n", "\r\n")
+io.open(p, "wb").write(res.encode("cp1251", "replace"))
+PY
+    echo "Окно игры выставлено 1000x600 (под масштаб 0.8)"
+  fi
 fi
 
 G=$(xdotool getdisplaygeometry 2>/dev/null)
