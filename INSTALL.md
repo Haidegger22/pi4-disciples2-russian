@@ -132,9 +132,16 @@ python3 07-ru-case-fix.py --apply    # применить (копии в ~/d2-ba
 1144x686, и игра на ней тоже запускается).
 
 ```bash
-./06-screens.sh          # телевизор слева, панель справа, настройка в автозапуске
-./06-screens.sh          # имена выходов при необходимости: HDMI=HDMI-A-1 PANEL=DSI-1
+./06-screens.sh          # сам определит телевизор и поставит его в 0,0, а панель правее
 ```
+
+Скрипт **сам определяет**, подключён ли телевизор:
+
+- подключён — ставит его в 0,0, а встроенную панель правее с масштабом 0.7;
+- не подключён — ставит в 0,0 саму панель.
+
+Это важно: если телевизор выключен, а панель оставить на позиции 1360, окно игры уедет
+за границу видимой области — игра запустится, звук будет идти, а картинки не видно.
 
 Встроенная панель 800x480 меньше минимума игры (800x600) — масштаб 0.7 это компенсирует.
 
@@ -211,6 +218,8 @@ cp -a ~/d2-backup-mod/.  ~/.wine-disciples/drive_c/Disciples2/   # откати�
 rm ~/.config/pipewire/pipewire.conf.d/99-buffer.conf             # звук по умолчанию
 ```
 
+
+---
 
 ---
 
@@ -665,24 +674,30 @@ cat > $HOME/d2-scripts/06-screens.sh << 'SCRIPT_EOF'
 # поднимает логическое разрешение до 1144x686 — тогда игра запускается и на ней.
 set -u
 
-HDMI="${HDMI:-HDMI-A-1}"
-PANEL="${PANEL:-DSI-1}"
 PANEL_SCALE="${PANEL_SCALE:-0.7}"
+LOG="${LOG:-/tmp/screens-setup.log}"
 
-echo "=== Текущее состояние:"
-wlr-randr 2>/dev/null | grep -E "^[A-Za-z]|current|Scale|Position" | sed 's/^/    /'
+echo "=== Выходы сейчас:"
+wlr-randr 2>/dev/null | grep -E "^[A-Za-z]|current" | sed 's/^/    /'
 
-echo
-echo "=== Ставлю: телевизор в 0,0, панель справа"
-if wlr-randr --output "$HDMI" --on --scale 1 --pos 0,0 2>/dev/null; then
-  echo "    $HDMI — позиция 0,0, масштаб 1"
+HDMI=$(wlr-randr 2>/dev/null | awk '/^HDMI/{print $1; exit}')
+PANEL=$(wlr-randr 2>/dev/null | awk '/^DSI/{print $1; exit}')
+echo "=== Определено: телевизор='${HDMI:-нет}', встроенная панель='${PANEL:-нет}'"
+
+if [ -n "$HDMI" ]; then
+  wlr-randr --output "$HDMI" --on --scale 1 --pos 0,0 2>/dev/null \
+    && echo "    $HDMI — позиция 0,0, масштаб 1 (основной)"
+  if [ -n "$PANEL" ]; then
+    wlr-randr --output "$PANEL" --on --scale "$PANEL_SCALE" --pos 1360,0 2>/dev/null \
+      && echo "    $PANEL — позиция 1360,0, масштаб $PANEL_SCALE"
+  fi
+  echo "Экраны: телевизор $HDMI в 0,0, панель ${PANEL:-нет} справа" >> "$LOG"
 else
-  echo "    $HDMI не найден (телевизор выключен?) — пропускаю"
-fi
-
-# панель ставим за телевизором; если телевизора нет, панель обязана быть в 0,0
-if wlr-randr --output "$PANEL" --on --scale "$PANEL_SCALE" --pos 1360,0 2>/dev/null; then
-  echo "    $PANEL — позиция 1360,0, масштаб $PANEL_SCALE"
+  if [ -n "$PANEL" ]; then
+    wlr-randr --output "$PANEL" --on --scale "$PANEL_SCALE" --pos 0,0 2>/dev/null \
+      && echo "    $PANEL — позиция 0,0, масштаб $PANEL_SCALE (телевизора нет)"
+  fi
+  echo "Экраны: телевизора нет, панель ${PANEL:-нет} в 0,0" >> "$LOG"
 fi
 sleep 4
 
@@ -696,12 +711,29 @@ echo "=== Закрепляю в автозапуске рабочего стол
 mkdir -p "$HOME/.config/labwc"
 cat > "$HOME/.config/labwc/autostart-screen.sh" <<'SH'
 #!/bin/bash
-# Экраны: телевизор слева основной, встроенная панель справа с масштабом 0.7.
-# Масштаб панели нужен, чтобы её логическое разрешение (1144x686) было не меньше
-# 800x600 — иначе Disciples II не инициализируется на встроенном экране.
-sleep 3
-wlr-randr --output HDMI-A-1 --on --scale 1 --pos 0,0 2>/dev/null
-wlr-randr --output DSI-1 --on --scale 0.7 --pos 1360,0 2>/dev/null
+# Настройка экранов для Disciples II.
+# Игра открывается на экране в координатах 0,0. Телевизор подключён — он в 0,0,
+# панель правее. Телевизора нет — панель в 0,0, иначе окно игры уедет за границу
+# видимой области (игра идёт, звук есть, картинки не видно).
+# Масштаб 0.7 поднимает логическое разрешение панели 800x480 до 1144x686,
+# иначе игре не хватает минимума 800x600.
+sleep 4
+
+HDMI=$(wlr-randr 2>/dev/null | awk '/^HDMI/{print $1; exit}')
+PANEL=$(wlr-randr 2>/dev/null | awk '/^DSI/{print $1; exit}')
+
+if [ -n "$HDMI" ]; then
+    wlr-randr --output "$HDMI" --on --scale 1 --pos 0,0 2>/dev/null
+    if [ -n "$PANEL" ]; then
+        wlr-randr --output "$PANEL" --on --scale 0.7 --pos 1360,0 2>/dev/null
+    fi
+    echo "Экраны: телевизор $HDMI в 0,0, панель $PANEL справа" >> /tmp/screens-setup.log
+else
+    if [ -n "$PANEL" ]; then
+        wlr-randr --output "$PANEL" --on --scale 0.7 --pos 0,0 2>/dev/null
+    fi
+    echo "Экраны: телевизора нет, панель $PANEL в 0,0" >> /tmp/screens-setup.log
+fi
 SH
 chmod +x "$HOME/.config/labwc/autostart-screen.sh"
 A="$HOME/.config/labwc/autostart"
